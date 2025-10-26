@@ -1,0 +1,11 @@
+version: "3.9"
+
+services:
+  spellbook:
+    image: nginx:stable-alpine
+    container_name: spellbook_web
+    ports:
+      - "8028:80"
+    volumes:
+      - ./app:/usr/share/nginx/html:ro
+    restart: unless-stopped
