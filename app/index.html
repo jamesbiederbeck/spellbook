@@ -256,18 +256,18 @@ body {
   <div class="keypad">
     <div class="fn-row">
       <div class="btn gray" id="power">Power</div>
-      <div class="btn gray" id="spell">Spell</div>
+      <div class="btn gray" id="spell-btn">Spell</div>
       <div class="btn orange" id="replay">Replay</div>
       <div class="btn orange" id="repeat">Repeat</div>
       <div class="btn blue" id="say">Say</div>
       <div class="btn pink" id="check">Check</div>
     </div>
     <div class="keys">
-      <div class="btn green">A</div><div class="btn green">B</div><div class="btn green">C</div><div class="btn green">D</div><div class="btn green">E</div>
-      <div class="btn green">F</div><div class="btn green">G</div><div class="btn green">H</div><div class="btn green">I</div><div class="btn green">J</div>
-      <div class="btn green">K</div><div class="btn green">L</div><div class="btn green">M</div><div class="btn green">N</div><div class="btn green">O</div>
-      <div class="btn green">P</div><div class="btn green">Q</div><div class="btn green">R</div><div class="btn green">S</div><div class="btn green">T</div>
-      <div class="btn green">U</div><div class="btn green">V</div><div class="btn green">W</div><div class="btn green">X</div><div class="btn green">Y</div><div class="btn green">Z</div>
+      <div class="btn green letter vowel" id="a-btn">A</div><div class="btn green letter consonant" id="b-btn">B</div><div class="btn green letter consonant" id="c-btn">C</div><div class="btn green letter consonant" id="d-btn">D</div><div class="btn green letter vowel" id="e-btn">E</div>
+      <div class="btn green letter consonant" id="f-btn">F</div><div class="btn green letter consonant" id="g-btn">G</div><div class="btn green letter consonant" id="h-btn">H</div><div class="btn green letter vowel" id="i-btn">I</div><div class="btn green letter consonant" id="j-btn">J</div>
+      <div class="btn green letter consonant" id="k-btn">K</div><div class="btn green letter consonant" id="l-btn">L</div><div class="btn green letter consonant" id="m-btn">M</div><div class="btn green letter consonant" id="n-btn">N</div><div class="btn green letter vowel" id="o-btn">O</div>
+      <div class="btn green letter consonant" id="p-btn">P</div><div class="btn green letter consonant" id="q-btn">Q</div><div class="btn green letter consonant" id="r-btn">R</div><div class="btn green letter consonant" id="s-btn">S</div><div class="btn green letter consonant" id="t-btn">T</div>
+      <div class="btn green letter vowel" id="u-btn">U</div><div class="btn green letter consonant" id="v-btn">V</div><div class="btn green letter consonant" id="w-btn">W</div><div class="btn green letter consonant" id="x-btn">X</div><div class="btn green letter consonant" id="y-btn">Y</div><div class="btn green letter consonant" id="z-btn">Z</div>
     </div>
     <div class="big-row">
       <div class="btn gray">Erase</div>
@@ -278,12 +278,18 @@ body {
 
   <div class="footer">
     <div class="badge-era">retro 1979–98</div>
-    <div style="font-weight:700; color:#6a1b9a;">ui prototype · no functionality yet</div>
   </div>
 </section>
 
   </div>
 
-<script src="js/spellbook.js"></script>
+<script type="importmap">
+{
+  "imports": {
+    "onnxruntime-web": "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.16.3/dist/ort.min.js"
+  }
+}
+</script>
+<script type="module" src="js/spellbook.js"></script>
 </body>
 </html>

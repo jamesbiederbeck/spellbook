@@ -2,7 +2,8 @@
 // SpellBook Device Controller
 // ===========================
 
-// Finite State Machine — hardware behavior simulation
+import { PiperTTS } from './piper-tts.js';
+
 const DeviceState = Object.freeze({
   POWER_OFF: 'POWER_OFF',
   BOOTING: 'BOOTING',
@@ -19,35 +20,41 @@ const DeviceState = Object.freeze({
 });
 
 let state = DeviceState.POWER_OFF;
-const vfd = document.querySelector('.vfd .text');
-const recordBtn = document.querySelector('.record-btn');
-const sayBtn = document.querySelector('.btn.blue:nth-child(5)'); // "Say" button
-const powerBtn = document.querySelector('.btn.gray'); // first gray = Power
-const checkBtn = document.querySelector('.btn.pink:last-child'); // "Enter" = Check
-const keys = document.querySelectorAll('.keys .btn');
 let targetWord = '';
 let typedWord = '';
+let freeTypeBuffer = ''; // For free typing in IDLE_READY
+let piperTTS = null;
+
+const vfd = document.querySelector('.vfd .text');
+const recordBtn = document.querySelector('.record-btn');
+const sayBtn = document.getElementById('say');
+const powerBtn = document.getElementById('power');
+const spellBtn = document.getElementById('spell-btn');
+const checkBtn = document.querySelector('.big-row .btn.pink'); // "Enter"
+const keys = document.querySelectorAll('.keys .btn');
+const eraseBtn = document.querySelector('.big-row .btn.gray');
+const spaceBtn = document.querySelector('.big-row .btn.blue');
+
+const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
 
 /* ===========================
    HARDWARE-LIKE FUNCTIONS
 =========================== */
 
 function updateVFD(text) {
-  // Simulate instant-on phosphor refresh (not animation)
   vfd.textContent = text.toUpperCase();
 }
 
 function playTone(freq = 440, dur = 150) {
-  const ctx = new (window.AudioContext || window.webkitAudioContext)();
-  const osc = ctx.createOscillator();
-  const gain = ctx.createGain();
+  const osc = audioCtx.createOscillator();
+  const gain = audioCtx.createGain();
   osc.connect(gain);
-  gain.connect(ctx.destination);
-  osc.frequency.value = freq;
+  gain.connect(audioCtx.destination);
   osc.type = 'square';
+  osc.frequency.setValueAtTime(freq, audioCtx.currentTime);
+  gain.gain.setValueAtTime(0.1, audioCtx.currentTime);
   osc.start();
-  gain.gain.setValueAtTime(0.1, ctx.currentTime);
-  osc.stop(ctx.currentTime + dur / 1000);
+  osc.stop(audioCtx.currentTime + dur / 1000);
 }
 
 function setState(newState) {
@@ -66,7 +73,8 @@ function handlePower() {
     playTone(660, 200);
     setTimeout(() => {
       setState(DeviceState.IDLE_READY);
-      updateVFD('PRESS SAY OR SPELL');
+      freeTypeBuffer = '';
+      updateVFD('');
     }, 800);
   } else {
     setState(DeviceState.SHUTDOWN);
@@ -74,30 +82,56 @@ function handlePower() {
     playTone(330, 300);
     setTimeout(() => {
       setState(DeviceState.POWER_OFF);
+      freeTypeBuffer = '';
+      targetWord = '';
+      typedWord = '';
       updateVFD('');
     }, 700);
   }
 }
 
 async function handleSay() {
-  if (state !== DeviceState.IDLE_READY) return;
-  setState(DeviceState.SAY_MODE);
-  // choose a random target word for demo
-  const words = ['apple', 'banana', 'cat', 'dog', 'train'];
-  targetWord = words[Math.floor(Math.random() * words.length)];
-  updateVFD(`SAY ${targetWord.toUpperCase()}`);
-  playTone(440, 120);
-  // Simulate Piper TTS playback
-  try {
-    const audio = new Audio(`/api/speak?text=${encodeURIComponent(targetWord)}`);
-    audio.play();
-  } catch {
-    console.warn('TTS playback not connected');
+  // In IDLE_READY: start SAY_MODE with random word
+  if (state === DeviceState.IDLE_READY) {
+    setState(DeviceState.SAY_MODE);
+    const words = ['apple', 'banana', 'cat', 'dog', 'train'];
+    targetWord = words[Math.floor(Math.random() * words.length)];
+    freeTypeBuffer = ''; // Clear free type buffer
+    updateVFD(`SAY: ${targetWord.toUpperCase()}`);
+    playTone(440, 120);
+    
+    await speakWord(targetWord);
+    
+    setTimeout(() => {
+      updateVFD('PRESS SPELL TO TYPE');
+      setState(DeviceState.IDLE_READY);
+    }, 2000);
+    return;
   }
-  setTimeout(() => {
-    updateVFD('PRESS RECORD');
-    setState(DeviceState.IDLE_READY);
-  }, 2000);
+  
+  // In SAY_MODE: replay the word
+  if (state === DeviceState.SAY_MODE) {
+    playTone(440, 120);
+    await speakWord(targetWord);
+    return;
+  }
+}
+
+async function speakWord(word) {
+  try {
+    if (piperTTS) {
+      await piperTTS.synthesize(word);
+    } else {
+      console.warn('Piper TTS not loaded, using fallback');
+      // Fallback to basic TTS if available
+      if (window.speechSynthesis) {
+        const utterance = new SpeechSynthesisUtterance(word);
+        window.speechSynthesis.speak(utterance);
+      }
+    }
+  } catch (error) {
+    console.warn('TTS playback failed:', error);
+  }
 }
 
 function handleRecord() {
@@ -111,8 +145,6 @@ function handleRecord() {
   updateVFD('LISTENING...');
   playTone(880, 100);
 
-  // Placeholder for real STT integration
-  // Simulate recorded input and transcription
   setTimeout(() => {
     stopRecording();
     simulateTranscription();
@@ -121,13 +153,14 @@ function handleRecord() {
 
 function stopRecording() {
   if (state !== DeviceState.RECORDING) return;
-  recordBtn.style.background = 'radial-gradient(circle at 30% 30%, #ff7676, #d41c1c 70%)';
+  recordBtn.style.background =
+    'radial-gradient(circle at 30% 30%, #ff7676, #d41c1c 70%)';
   updateVFD('PROCESSING...');
   setState(DeviceState.TRANSCRIBING);
 }
 
 function simulateTranscription() {
-  const fakeResult = targetWord; // assume perfect recognition
+  const fakeResult = targetWord;
   setState(DeviceState.SPEECH_EVALUATE);
   updateVFD(`YOU SAID: ${fakeResult.toUpperCase()}`);
   playTone(520, 120);
@@ -137,33 +170,149 @@ function simulateTranscription() {
   }, 1500);
 }
 
+function handleSpell() {
+  // Only allow entering SPELL_MODE if we have a target word from SAY mode
+  if (state !== DeviceState.IDLE_READY) return;
+  
+  if (!targetWord) {
+    // No target word set, play error tone
+    playTone(220, 150);
+    updateVFD('PRESS SAY FIRST');
+    setTimeout(() => {
+      updateVFD(freeTypeBuffer);
+    }, 1200);
+    return;
+  }
+  
+  setState(DeviceState.SPELL_MODE);
+  typedWord = '';
+  updateVFD('TYPE WORD:');
+  playTone(480, 100);
+}
+
 function handleKeyPress(e) {
-  if (state !== DeviceState.SPELL_MODE) return;
   const letter = e.target.textContent.trim();
-  if (!letter) return;
-  typedWord += letter;
-  updateVFD(typedWord);
-  playTone(400, 40);
+  if (!letter.match(/^[A-Z]$/)) return;
+  
+  // In SPELL_MODE: add to typed word buffer
+  if (state === DeviceState.SPELL_MODE) {
+    typedWord += letter;
+    updateVFD(typedWord);
+    return;
+  }
+  
+  // In IDLE_READY: free typing mode - speak letter and add to buffer
+  if (state === DeviceState.IDLE_READY) {
+    freeTypeBuffer += letter;
+    updateVFD(freeTypeBuffer);
+    speakWord(letter); // Speak the letter aloud
+    return;
+  }
+}
+
+function handleErase() {
+  // In SPELL_MODE: delete from typed word
+  if (state === DeviceState.SPELL_MODE) {
+    typedWord = typedWord.slice(0, -1);
+    updateVFD(typedWord || 'TYPE WORD:');
+    playTone(300, 40);
+    return;
+  }
+  
+  // In IDLE_READY: delete from free type buffer
+  if (state === DeviceState.IDLE_READY) {
+    freeTypeBuffer = freeTypeBuffer.slice(0, -1);
+    updateVFD(freeTypeBuffer);
+    playTone(300, 40);
+    return;
+  }
+}
+
+function handleSpace() {
+  // In SPELL_MODE: add space to typed word
+  if (state === DeviceState.SPELL_MODE) {
+    typedWord += ' ';
+    updateVFD(typedWord);
+    playTone(260, 40);
+    return;
+  }
+  
+  // In IDLE_READY: add space to free type buffer
+  if (state === DeviceState.IDLE_READY) {
+    freeTypeBuffer += ' ';
+    updateVFD(freeTypeBuffer);
+    playTone(260, 40);
+    return;
+  }
 }
 
 function handleCheck() {
-  if (state !== DeviceState.SPELL_MODE) return;
-  setState(DeviceState.SPELL_EVALUATE);
-  if (typedWord.toLowerCase() === targetWord.toLowerCase()) {
-    updateVFD('CORRECT!');
-    playTone(880, 200);
-    setState(DeviceState.SUCCESS);
-  } else {
-    updateVFD('TRY AGAIN');
-    playTone(220, 200);
-    setState(DeviceState.FAILURE);
+  // In SPELL_MODE: evaluate the spelling
+  if (state === DeviceState.SPELL_MODE) {
+    setState(DeviceState.SPELL_EVALUATE);
+    if (typedWord.trim().toLowerCase() === targetWord.toLowerCase()) {
+      updateVFD('CORRECT!');
+      playTone(880, 200);
+      setState(DeviceState.SUCCESS);
+    } else {
+      updateVFD('TRY AGAIN');
+      playTone(220, 200);
+      setState(DeviceState.FAILURE);
+    }
+    setTimeout(() => {
+      typedWord = '';
+      targetWord = ''; // Clear target after evaluation
+      updateVFD('');
+      setState(DeviceState.IDLE_READY);
+    }, 1500);
+    return;
   }
-  setTimeout(() => {
-    typedWord = '';
-    updateVFD('PRESS SAY OR SPELL');
-    setState(DeviceState.IDLE_READY);
-  }, 1500);
+  
+  // In IDLE_READY: speak the typed text
+  if (state === DeviceState.IDLE_READY && freeTypeBuffer.trim()) {
+    playTone(440, 100);
+    speakWord(freeTypeBuffer.trim());
+    return;
+  }
 }
+
+/* ===========================
+   KEYBOARD SUPPORT
+=========================== */
+
+document.addEventListener('keydown', e => {
+  // In SPELL_MODE: handle spelling input
+  if (state === DeviceState.SPELL_MODE) {
+    if (/^[a-zA-Z]$/.test(e.key)) {
+      typedWord += e.key.toUpperCase();
+      updateVFD(typedWord);
+    } else if (e.key === 'Backspace') {
+      handleErase();
+    } else if (e.key === ' ') {
+      handleSpace();
+    } else if (e.key === 'Enter') {
+      handleCheck();
+    }
+    return;
+  }
+  
+  // In IDLE_READY: handle free typing
+  if (state === DeviceState.IDLE_READY) {
+    if (/^[a-zA-Z]$/.test(e.key)) {
+      const letter = e.key.toUpperCase();
+      freeTypeBuffer += letter;
+      updateVFD(freeTypeBuffer);
+      speakWord(letter); // Speak the letter
+    } else if (e.key === 'Backspace') {
+      handleErase();
+    } else if (e.key === ' ') {
+      handleSpace();
+    } else if (e.key === 'Enter') {
+      handleCheck(); // Speak the whole word
+    }
+    return;
+  }
+});
 
 /* ===========================
    EVENT BINDINGS
@@ -172,8 +321,30 @@ function handleCheck() {
 powerBtn.addEventListener('click', handlePower);
 sayBtn.addEventListener('click', handleSay);
 recordBtn.addEventListener('click', handleRecord);
+spellBtn.addEventListener('click', handleSpell);
 checkBtn.addEventListener('click', handleCheck);
+eraseBtn.addEventListener('click', handleErase);
+spaceBtn.addEventListener('click', handleSpace);
 keys.forEach(k => k.addEventListener('click', handleKeyPress));
+
+/* ===========================
+   INITIALIZE PIPER TTS
+=========================== */
+
+async function initializePiperTTS() {
+  try {
+    console.log('🎵 Loading Piper TTS...');
+    piperTTS = await PiperTTS.from_pretrained(
+      './models/en_US-sam-medium.onnx',
+      './models/en_US-sam-medium.onnx.json'
+    );
+    console.log('✅ Piper TTS loaded successfully');
+  } catch (error) {
+    console.warn('⚠️ Failed to load Piper TTS:', error);
+    console.log('📱 Falling back to browser TTS');
+  }
+}
 
 /* Initialize */
 updateVFD('');
+initializePiperTTS();
