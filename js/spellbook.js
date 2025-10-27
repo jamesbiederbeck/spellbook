@@ -3,6 +3,12 @@
 // ===========================
 
 import { PiperTTS } from './piper-tts.js';
+import { WhisperASR } from './whisper-asr.js';
+const asr = await WhisperASR.from_pretrained(
+  '/models/whisper-tiny.en.onnx',
+  '/models/whisper-tiny.en.vocab.json',
+  '/models/whisper-tiny.en.feature.json'
+);
 
 const DeviceState = Object.freeze({
   POWER_OFF: 'POWER_OFF',
