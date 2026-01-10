@@ -150,9 +150,11 @@ async function handleRecord() {
   // Use WhisperASR to transcribe from microphone for 2 seconds
   try {
     const transcript = await performTranscription();
+    stopRecording(); // Reset button and show "PROCESSING..."
     processTranscriptionResult(transcript);
   } catch (error) {
     console.error('Transcription error:', error);
+    recordBtn.style.background = 'radial-gradient(circle at 30% 30%, #ff7676, #d41c1c 70%)';
     updateVFD('ERROR');
     playTone(220, 200);
     setTimeout(() => {
