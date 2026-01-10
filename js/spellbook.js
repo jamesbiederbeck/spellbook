@@ -3,6 +3,7 @@
 // ===========================
 
 import { PiperTTS } from './piper-tts.js';
+import { WhisperASR } from './whisper-asr.js';
 
 const DeviceState = Object.freeze({
   POWER_OFF: 'POWER_OFF',
@@ -24,6 +25,7 @@ let targetWord = '';
 let typedWord = '';
 let freeTypeBuffer = ''; // For free typing in IDLE_READY
 let piperTTS = null;
+let whisperASR = null;
 
 const vfd = document.querySelector('.vfd .text');
 const recordBtn = document.querySelector('.record-btn');
@@ -134,7 +136,7 @@ async function speakWord(word) {
   }
 }
 
-function handleRecord() {
+async function handleRecord() {
   if (state === DeviceState.RECORDING) {
     stopRecording();
     return;
@@ -145,10 +147,21 @@ function handleRecord() {
   updateVFD('LISTENING...');
   playTone(880, 100);
 
-  setTimeout(() => {
-    stopRecording();
-    simulateTranscription();
-  }, 2000);
+  // Use WhisperASR to transcribe from microphone for 2 seconds
+  try {
+    const transcript = await performTranscription();
+    stopRecording(); // Reset button and show "PROCESSING..."
+    processTranscriptionResult(transcript);
+  } catch (error) {
+    console.error('Transcription error:', error);
+    recordBtn.style.background = 'radial-gradient(circle at 30% 30%, #ff7676, #d41c1c 70%)';
+    updateVFD('ERROR');
+    playTone(220, 200);
+    setTimeout(() => {
+      setState(DeviceState.IDLE_READY);
+      updateVFD(freeTypeBuffer);
+    }, 1000);
+  }
 }
 
 function stopRecording() {
@@ -159,10 +172,20 @@ function stopRecording() {
   setState(DeviceState.TRANSCRIBING);
 }
 
-function simulateTranscription() {
-  const fakeResult = targetWord;
+async function performTranscription() {
+  if (whisperASR) {
+    // Use WhisperASR to transcribe (2000ms = 2 seconds of audio)
+    return await whisperASR.transcribe(2000);
+  } else {
+    console.warn('WhisperASR not loaded, returning empty result');
+    return '';
+  }
+}
+
+function processTranscriptionResult(transcript) {
   setState(DeviceState.SPEECH_EVALUATE);
-  updateVFD(`YOU SAID: ${fakeResult.toUpperCase()}`);
+  const result = transcript.trim() || '(no speech detected)';
+  updateVFD(`YOU SAID: ${result.toUpperCase()}`);
   playTone(520, 120);
   setTimeout(() => {
     updateVFD('PRESS SPELL TO TYPE');
@@ -345,6 +368,22 @@ async function initializePiperTTS() {
   }
 }
 
+/* ===========================
+   INITIALIZE WHISPER ASR
+=========================== */
+
+async function initializeWhisperASR() {
+  try {
+    console.log('🎤 Loading Whisper ASR...');
+    whisperASR = await WhisperASR.from_pretrained();
+    console.log('✅ Whisper ASR loaded successfully');
+  } catch (error) {
+    console.warn('⚠️ Failed to load Whisper ASR:', error);
+    console.log('📱 Will attempt fallback if needed');
+  }
+}
+
 /* Initialize */
 updateVFD('');
 initializePiperTTS();
+initializeWhisperASR();
