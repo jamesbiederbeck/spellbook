@@ -1,0 +1,8 @@
+{
+  "vendor_repo": "jamesbiederbeck/whisper.cpp-vendored-android",
+  "release_tag": "v1.9.2",
+  "asset_name": "whisper-1.9.2-android-aarch64.aar",
+  "asset_sha256": "9aca4d8f43e5ef5f0e6b1fd309b506d51ec8872743653d48097b86f770c0598a",
+  "upstream_repo": "https://github.com/ggml-org/whisper.cpp",
+  "upstream_ref": "v1.9.2"
+}

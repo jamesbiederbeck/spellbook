@@ -1,0 +1,61 @@
+name: Android Build and Release
+
+on:
+  push:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android-release.yml"]
+    tags: ["android-v*"]
+  pull_request:
+    branches: [main]
+    paths: ["android/**", ".github/workflows/android-release.yml"]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: android
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Install Android SDK components
+        run: |
+          SDKMANAGER="$ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager"
+          yes | "$SDKMANAGER" --licenses > /dev/null
+          "$SDKMANAGER" "platforms;android-33" "build-tools;33.0.1"
+
+      - name: Generate debug keystore
+        run: make keystore
+
+      # Downloads the AAR pinned in whisper_cpp_binary_version.json (see
+      # that file for how to point this at a newer whisper.cpp-vendored-android
+      # release) and verifies it against the pinned sha256 before building.
+      - name: Build APK (WHISPER=1, native whisper.cpp STT)
+        run: |
+          BUILD_TOOLS="$ANDROID_HOME/build-tools/33.0.1"
+          export PATH="$BUILD_TOOLS:$PATH"
+          make WHISPER=1 \
+            ANDROID_JAR="$ANDROID_HOME/platforms/android-33/android.jar" \
+            AAPT2="$BUILD_TOOLS/aapt2"
+          cp aligned.apk spellbook.apk
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: spellbook-apk
+          path: android/spellbook.apk
+
+      - name: Create GitHub Release
+        if: startsWith(github.ref, 'refs/tags/android-v')
+        uses: softprops/action-gh-release@v2
+        with:
+          files: android/spellbook.apk
